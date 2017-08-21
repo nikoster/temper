@@ -4,8 +4,8 @@ Show the retention curves of the Temper onboarding process.
 
 ## Installation
 
-- `mv .env.example .env`
 - `composer update`
+- `cp .env.example .env`
 - `php artisan key:generate`
 - `mysql -uroot -p` and hit enter on password input
 - `create database temper;` and then `exit` out
