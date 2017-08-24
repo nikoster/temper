@@ -9,6 +9,6 @@ class StatsController extends Controller
 {
     public function index(StatsService $statsService)
     {
-        return view('stats')->with('stats', $statsService->gatherData());
+        return view('stats')->with('stats', $statsService->getRetentionCurvesData());
     }
 }

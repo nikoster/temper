@@ -1,86 +1,125 @@
 <?php
 
 namespace App\Services;
-
 use App\Repositories\Users;
-use Carbon\Carbon;
 
+/**
+ * Class StatsService
+ *
+ * @package App\Services
+ */
+/**
+ * Class StatsService
+ * @package App\Services
+ */
 class StatsService
 {
     /**
-     * Entrance method that will be responsible for gathering all the needed data
+     * @var Users
+     */
+    public $users;
+
+    /**
+     * @var DateService
+     */
+    protected $dateService;
+
+    /**
+     * StatsService constructor.
+     *
+     * @param Users $users
+     * @param DateService $dateService
+     */
+    public function __construct(Users $users, DateService $dateService)
+    {
+        $this->users = $users;
+        $this->dateService = $dateService;
+    }
+
+    /**
+     * Returns the retention curves data.
      *
      * @return array
      */
-    public function gatherData()
+    public function getRetentionCurvesData()
     {
-        // Get the users
-        $userRepository = new Users();
-        $users = $userRepository->groupedByWeek();
+        return $this->getWeeklyCohorts($this->users->groupedByWeek());
+    }
 
-        // Initialize return object
+    /**
+     * Loop through the weeks/cohorts to create the required structure for the frontend.
+     *
+     * @param $usersByWeek
+     * @return array
+     */
+    public function getWeeklyCohorts($usersByWeek)
+    {
         $data = [];
 
-        // Loop through the weeks/cohorts to create the required structure for the frontend
-        foreach ($users as $week => $weekUsers) {
-            $firstUserDate = $weekUsers->first()->created_at;
-            $cohort = [
-                'name' => $this->getCohortDate($firstUserDate),
-                'data' => $this->calculateOnboardingPercentages($weekUsers)
-            ];
-
-            $data[] = $cohort;
+        foreach ($usersByWeek as $weekUsers) {
+            $data[] = $this->getSingleCohort($weekUsers);
         }
 
         return $data;
     }
 
     /**
-     * The cohort date (in the graph legend) should always be a Monday. We can't expect
-     * that the given data provides registrations from every single day, so this method
-     * helps to calculate the first day of the week of any given date.
+     * Builds the data for a single cohort.
+     *
+     * @param $weekUsers
+     * @return array
+     */
+    public function getSingleCohort($weekUsers)
+    {
+        return [
+            'name' => $this->getCohortName($weekUsers->first()->created_at),
+            'data' => $this->mapPercentageOfUsersToAllOnboardingPercentages($weekUsers)
+        ];
+    }
+
+    /**
+     * The cohort date (in the graph legend) should always be a Monday, since we can't expect
+     * that the given data provides registrations from every single day.
      *
      * @param string $date
-     * @return string|static
+     * @return string
      */
-    private function getCohortDate($date)
+    private function getCohortName($date)
     {
-        // Get the numeral representation of the date
-        $dayOfWeek = Carbon::parse($date)->format('w');
-
-        // Special cases
-        if ($dayOfWeek === 1) return $date; // Already at Monday
-        if ($dayOfWeek === 0) return Carbon::parse($date)->subDays(6); // Sunday
-
-        // Return the new date
-        return $cohortDate = Carbon::parse($date)->subDays($dayOfWeek - 1)->format('Y-m-d');
+        return resolve('App\Services\DateService')->getMondayDateOfTheWeekForDate($date);
     }
 
     /**
      * Calculates the percentage of users that are at (or beyond) the given onboarding percentage.
      *
-     * @param $users
+     * @param $usersInCohort
      * @return array
      */
-    private function calculateOnboardingPercentages($users)
+    public function mapPercentageOfUsersToAllOnboardingPercentages($usersInCohort)
     {
-        // Get the amount of users this cohort has
-        $userCount = count($users);
+        $onboardingPercentagesOfUsers = $usersInCohort->pluck('onboarding_percentage')->all();
+        $onboardingRange = range(0, 100);
 
-        // Flatten user data to array with the onboarding percentages only
-        $percentages = $users->pluck('onboarding_percentage');
+        $mapOnboardingPercentageToUserPercentage = function($onboardingPercentage) use ($usersInCohort, $onboardingPercentagesOfUsers) {
+            $userCount = $this->getUserCountOfSingleOnboardingPercentage($onboardingPercentage, $onboardingPercentagesOfUsers);
 
-        // Create an array from 1 till 100 that calculates the percentages of users that are at (or passed) that percentage
-        $cohortData = [];
-        for ($i = 0; $i <= 100; $i++) {
-            $count = 0;
-            foreach ($percentages as $percentage) {
-                if ($percentage >= $i) $count++;
-            }
+            return $userCount / count($usersInCohort) * 100;
+        };
 
-            $cohortData[$i] = ($count / $userCount) * 100;
-        }
+        return array_map($mapOnboardingPercentageToUserPercentage, $onboardingRange);
+    }
 
-        return $cohortData;
+    /**
+     * Get the amount of users that are at (or beyond) the given onboarding percentage.
+     *
+     * @param $onboardingPercentage
+     * @param $onboardingPercentagesOfUsers
+     * @return int
+     */
+    public function getUserCountOfSingleOnboardingPercentage($onboardingPercentage, $onboardingPercentagesOfUsers)
+    {
+        return count(array_filter($onboardingPercentagesOfUsers, function($onboardingPercentageOfUser) use ($onboardingPercentage) {
+            return $onboardingPercentageOfUser >= $onboardingPercentage;
+        }));
     }
 }

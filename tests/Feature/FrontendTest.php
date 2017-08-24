@@ -7,7 +7,7 @@ use Illuminate\Foundation\Testing\WithoutMiddleware;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 
-class TemperTest extends TestCase
+class FrontendTest extends TestCase
 {
     /**
      * Test the redirect to /stats.
